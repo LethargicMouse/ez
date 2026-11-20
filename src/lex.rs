@@ -6,7 +6,6 @@ pub type Span = Range<usize>;
 
 pub struct Stream {
     pub source: Source,
-    last: Option<Token>,
     loc: Loc,
     cursor: usize,
 }
@@ -18,7 +17,6 @@ impl Stream {
                 pos: Pos { line: 1, symbol: 1 },
                 line: (0..0).into(),
             },
-            last: None,
             cursor: 0,
             source,
         };
@@ -26,24 +24,29 @@ impl Stream {
         res
     }
 
-    pub fn peek(&mut self) -> Token {
-        let res = self.next();
-        self.last = Some(res);
-        res
-    }
-
     pub fn next(&mut self) -> Token {
-        if let Some(res) = self.last.take() {
-            return res;
-        }
         self.advance_while(|c| c.is_ascii_whitespace());
         let mut chars = self.rest().iter();
         match chars.next() {
             Some(c) => match *c {
+                b';' => self.give(Tok::Semi, 1),
+                b'.' => self.give(Tok::Dot, 1),
+                b',' => self.give(Tok::Comma, 1),
                 b'(' => self.give(Tok::Parl, 1),
                 b')' => self.give(Tok::Parr, 1),
                 b'{' => self.give(Tok::Curl, 1),
                 b'}' => self.give(Tok::Curr, 1),
+                b'"' => {
+                    self.cursor += 1;
+                    let len = self.count_while(|c| c != b'"') + 2;
+                    self.cursor -= 1;
+                    let tok = if self.cursor + len == self.source.code.len() {
+                        Tok::UnclosedStr
+                    } else {
+                        Tok::Str
+                    };
+                    self.give(tok, len)
+                }
                 c if c.is_ascii_alphabetic() || c == b'_' => {
                     let len = self.count_while(|c| c.is_ascii_alphanumeric() || c == b'_');
                     self.give(Tok::from(&self.rest()[..len]), len)
@@ -115,6 +118,11 @@ pub enum Tok {
     Curl,
     Curr,
     Int,
+    Str,
+    UnclosedStr,
+    Comma,
+    Dot,
+    Semi,
 }
 
 impl Tok {
@@ -129,6 +137,11 @@ impl Tok {
             Tok::Curl => "`{`",
             Tok::Curr => "`}`",
             Tok::Int => "<int>",
+            Tok::Str => "<str>",
+            Tok::UnclosedStr => "<unclosed str>",
+            Tok::Comma => "`,`",
+            Tok::Dot => "`.`",
+            Tok::Semi => "`;`",
         }
     }
 }

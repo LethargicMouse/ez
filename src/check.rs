@@ -54,12 +54,8 @@ impl ast::Fun {
         let mut blocks = Vec::new();
         let mut typ_vars = Vec::new();
         let mut infer_checker = InferChecker::new();
-        let hint = match self.ret_typ {
-            Some(typ) => typ.check(&module_info.source, errors),
-            None => hir::Typ::Any,
-        };
-        let expr = self.body.check(hint, &mut typ_vars, &mut infer_checker);
-        let ret_typ = expr.typ();
+        let ret_typ = self.ret_typ.check(&module_info.source, errors);
+        let expr = self.body.check(&ret_typ, &mut typ_vars, &mut infer_checker);
         blocks.push(hir::Block {
             out: hir::Out::Ret(expr),
         });
@@ -87,35 +83,48 @@ impl ast::Typ {
 impl ast::Block {
     fn check(
         self,
-        hint: hir::Typ,
+        hint: &hir::Typ,
         typ_vars: &mut Vec<hir::Typ>,
         infer_checker: &mut InferChecker,
     ) -> hir::Expr {
-        self.out.check(hint, typ_vars, infer_checker)
+        self.out.check(&hint, typ_vars, infer_checker)
     }
 }
 
 impl ast::Expr {
     fn check(
         self,
-        hint: hir::Typ,
+        hint: &hir::Typ,
         typ_vars: &mut Vec<hir::Typ>,
         infer_checker: &mut InferChecker,
     ) -> hir::Expr {
         match self {
             ast::Expr::Int(int) => int.check(hint, typ_vars, infer_checker),
+            ast::Expr::Call(call) => call.check(),
+            ast::Expr::Str(span) => todo!(),
+            ast::Expr::Field(field) => todo!(),
         }
+    }
+}
+
+impl ast::Call {
+    pub fn check(&self) -> hir::Expr {
+        todo!()
     }
 }
 
 impl ast::Int {
     fn check(
         self,
-        hint: hir::Typ,
+        hint: &hir::Typ,
         typ_vars: &mut Vec<hir::Typ>,
         infer_checker: &mut InferChecker,
     ) -> hir::Expr {
-        let mut typ = if hint.is_int() { hint } else { hir::Typ::Any };
+        let mut typ = if hint.is_int() {
+            hint.copy()
+        } else {
+            hir::Typ::Any
+        };
         if !typ.is_rigid() {
             let id = typ_vars.len();
             typ_vars.push(typ);

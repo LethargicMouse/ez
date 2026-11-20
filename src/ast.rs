@@ -19,16 +19,36 @@ impl Module {
 
 pub struct Fun {
     pub name: Span,
-    pub ret_typ: Option<Typ>,
+    pub ret_typ: Typ,
     pub body: Block,
 }
 
 pub struct Block {
+    pub exprs: Vec<Expr>,
     pub out: Expr,
+}
+
+pub struct Call {
+    pub name: Span,
+    pub args: Vec<Expr>,
+}
+
+pub struct Field {
+    pub expr: Box<Expr>,
+    pub name: Span,
 }
 
 pub enum Expr {
     Int(Int),
+    Call(Call),
+    Str(Span),
+    Field(Field),
+}
+
+impl From<Call> for Expr {
+    fn from(call: Call) -> Self {
+        Self::Call(call)
+    }
 }
 
 impl From<Int> for Expr {

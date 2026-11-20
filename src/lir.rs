@@ -19,6 +19,11 @@ pub enum Out {
     Ret(Expr),
 }
 
+pub struct Call {
+    pub id: usize,
+    pub args: Vec<Expr>,
+}
+
 pub enum Expr {
     Int(IntTyp, u64),
 }
@@ -26,21 +31,34 @@ pub enum Expr {
 impl Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            lir::Expr::Int(typ, int) => write!(f, "{} {}", typ, int),
+            Expr::Int(typ, int) => write!(f, "{} {}", typ, int),
         }
     }
 }
 
 #[derive(Debug)]
+pub struct FunTyp {
+    params: Vec<Typ>,
+    ret_typ: Box<Typ>,
+}
+
+#[derive(Debug)]
 pub enum Typ {
     Int(IntTyp),
+    Fun(FunTyp),
+}
+
+impl From<IntTyp> for Typ {
+    fn from(typ: IntTyp) -> Self {
+        Self::Int(typ)
+    }
 }
 
 impl Typ {
     pub fn to_int(self) -> IntTyp {
         match self {
             Typ::Int(typ) => typ,
-            // _ => unreachable!("{:?}.to_int()", self),
+            _ => unreachable!("{:?}.to_int()", self),
         }
     }
 }
@@ -49,6 +67,7 @@ impl Display for Typ {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Typ::Int(typ) => write!(f, "{}", typ),
+            Typ::Fun(_) => write!(f, "ptr"),
         }
     }
 }

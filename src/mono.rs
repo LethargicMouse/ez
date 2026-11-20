@@ -35,17 +35,19 @@ impl hir::Expr {
     fn mono(&self, typ_vars: &[hir::Typ]) -> lir::Expr {
         match self {
             hir::Expr::Int(typ, int) => lir::Expr::Int(typ.mono(typ_vars).to_int(), *int),
+            hir::Expr::Call(call) => todo!(),
         }
     }
 }
 
 impl hir::Typ {
-    fn mono(self, typ_vars: &[hir::Typ]) -> lir::Typ {
+    fn mono(&self, typ_vars: &[hir::Typ]) -> lir::Typ {
         match self {
-            hir::Typ::Int(typ) => lir::Typ::Int(typ.into()),
-            hir::Typ::Var(id) => typ_vars[id].mono(typ_vars),
+            hir::Typ::Int(typ) => lir::IntTyp::from(*typ).into(),
+            hir::Typ::Var(id) => typ_vars[*id].mono(typ_vars),
             hir::Typ::Any => unreachable!("mono any typ"),
             hir::Typ::Err => unreachable!("mono err typ"),
+            hir::Typ::Fun(typ) => todo!(),
         }
     }
 }

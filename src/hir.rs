@@ -30,24 +30,36 @@ pub enum Out {
     Ret(Expr),
 }
 
+pub struct Call {
+    pub id: usize,
+    pub typ: FunTyp,
+}
+
 pub enum Expr {
     Int(Typ, u64),
+    Call(Call),
 }
 
-impl Expr {
-    pub fn typ(&self) -> Typ {
-        match self {
-            Expr::Int(typ, _) => *typ,
-        }
-    }
+#[derive(Debug)]
+pub struct FunTyp {
+    params: Vec<Typ>,
+    ret_typ_id: Box<Typ>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Debug)]
 pub enum Typ {
     Int(IntTyp),
+    Fun(FunTyp),
     Var(usize),
+
     Any,
     Err,
+}
+
+impl From<FunTyp> for Typ {
+    fn from(fun: FunTyp) -> Self {
+        Self::Fun(fun)
+    }
 }
 
 impl From<IntTyp> for Typ {
@@ -60,14 +72,25 @@ impl Typ {
     pub fn is_rigid(&self) -> bool {
         match self {
             Typ::Int(_) => true,
-            Typ::Var(_) => unreachable!("is_rigid nested typ var"),
             Typ::Any => false,
             Typ::Err => true,
+            Typ::Var(_) => unreachable!("is_rigid nested typ var"),
+            Typ::Fun(fun_typ) => fun_typ.params.iter().all(|t| t.is_rigid()),
         }
     }
 
     pub fn is_int(&self) -> bool {
         matches!(self, Self::Int(..) | Self::Err)
+    }
+
+    pub fn copy(&self) -> Self {
+        match self {
+            Typ::Int(typ) => Self::Int(*typ),
+            Typ::Var(id) => Self::Var(*id),
+            Typ::Any => Self::Any,
+            Typ::Err => Self::Err,
+            Typ::Fun(_) => unreachable!("copy of fun typ"),
+        }
     }
 }
 
