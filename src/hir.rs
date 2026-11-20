@@ -67,7 +67,7 @@ impl Typ {
     }
 
     pub fn is_int(&self) -> bool {
-        matches!(self, Self::Int(..))
+        matches!(self, Self::Int(..) | Self::Err)
     }
 }
 

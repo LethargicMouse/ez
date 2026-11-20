@@ -117,12 +117,10 @@ impl ast::Int {
     ) -> hir::Expr {
         let mut typ = if hint.is_int() { hint } else { hir::Typ::Any };
         if !typ.is_rigid() {
+            let id = typ_vars.len();
             typ_vars.push(typ);
-            typ = hir::Typ::Var(typ_vars.len());
-            infer_checker.checks.push(InferCheck {
-                id: typ_vars.len(),
-                loc: self.loc,
-            });
+            typ = hir::Typ::Var(id);
+            infer_checker.checks.push(InferCheck { loc: self.loc, id });
         }
         hir::Expr::Int(typ, self.val)
     }
