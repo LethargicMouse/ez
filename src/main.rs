@@ -12,6 +12,9 @@ mod mono;
 mod parse;
 mod util;
 
+#[cfg(test)]
+mod tests;
+
 fn main() -> ExitCode {
     match cli::run(args()) {
         Ok(_) => ExitCode::SUCCESS,

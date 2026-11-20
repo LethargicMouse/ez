@@ -14,7 +14,7 @@ use crate::{
 pub fn run(args: impl Iterator<Item = String>) -> Result<(), Fail> {
     let args = Args::parse(args)?;
     match args.command {
-        Command::Run(path) => run_file(path)?,
+        Command::Run(path) => exit(run_file(path)?),
         Command::Help => show_help(&args.exe_name),
     }
     Ok(())
@@ -27,15 +27,14 @@ fn show_help(exe_name: &str) {
     eprintln!("  run <path>");
 }
 
-fn run_file(path: PathBuf) -> Result<!, Fail> {
+pub fn run_file(path: PathBuf) -> Result<i32, Fail> {
     let out_path = Path::new("build/out");
     compile(path)?;
-    let code = process::Command::new(out_path)
+    Ok(process::Command::new(out_path)
         .status()
         .map_err(|err| fail::run_cmd(out_path, err))?
         .code()
-        .unwrap_or(1);
-    exit(code)
+        .unwrap_or(1))
 }
 
 fn compile(path: PathBuf) -> Result<(), Fail> {
