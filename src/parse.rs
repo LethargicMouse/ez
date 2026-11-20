@@ -57,10 +57,14 @@ fn fun(ctx: &mut Context) -> Result<Fun, Fail> {
 
 fn typ(fst: Tok, ctx: &mut Context) -> Result<Typ, Fail> {
     match fst {
-        Tok::Name => Ok(Typ::from_span(
-            ctx.stream.next().span,
-            &ctx.stream.source.code,
-        )),
+        Tok::Name => {
+            let token = ctx.stream.next();
+            Ok(Typ::from_span(
+                token.span,
+                token.loc,
+                &ctx.stream.source.code,
+            ))
+        }
         _ => unreachable!("parse typ with first tok {}", fst.as_str()),
     }
 }

@@ -57,13 +57,6 @@ impl From<IntTyp> for Typ {
 }
 
 impl Typ {
-    pub fn norm(self, typ_vars: &[Typ]) -> Typ {
-        match self {
-            Typ::Var(id) => typ_vars[id].norm(typ_vars),
-            _ => self,
-        }
-    }
-
     pub fn is_rigid(&self) -> bool {
         match self {
             Typ::Int(_) => true,

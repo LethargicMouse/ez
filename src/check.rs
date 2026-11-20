@@ -55,7 +55,7 @@ impl ast::Fun {
         let mut typ_vars = Vec::new();
         let mut infer_checker = InferChecker::new();
         let hint = match self.ret_typ {
-            Some(typ) => typ.check(errors),
+            Some(typ) => typ.check(&module_info.source, errors),
             None => hir::Typ::Any,
         };
         let expr = self.body.check(hint, &mut typ_vars, &mut infer_checker);
@@ -63,7 +63,7 @@ impl ast::Fun {
         blocks.push(hir::Block {
             out: hir::Out::Ret(expr),
         });
-        infer_checker.run(&mut typ_vars, errors, module_info);
+        infer_checker.run(&mut typ_vars, errors, &module_info.source);
         hir::Fun {
             typ_vars,
             ret_typ,
@@ -73,9 +73,12 @@ impl ast::Fun {
 }
 
 impl ast::Typ {
-    fn check(self, errors: &mut Errors) -> hir::Typ {
+    fn check(self, source: &Source, errors: &mut Errors) -> hir::Typ {
         match self {
-            ast::Typ::Name(_) => hir::Typ::Err,
+            ast::Typ::Name(name, loc) => {
+                errors.not_declared(source, loc, name);
+                hir::Typ::Err
+            }
             ast::Typ::I32 => hir::IntTyp::I32.into(),
         }
     }
@@ -169,10 +172,10 @@ impl InferChecker {
         Self { checks: Vec::new() }
     }
 
-    fn run(self, typ_vars: &mut Vec<hir::Typ>, errors: &mut Errors, module_info: &ModuleInfo) {
+    fn run(self, typ_vars: &mut Vec<hir::Typ>, errors: &mut Errors, source: &Source) {
         for check in self.checks {
             if !typ_vars[check.id].is_rigid() {
-                errors.cannot_infer(&module_info.source, check.loc);
+                errors.cannot_infer(&source, check.loc);
             }
         }
     }

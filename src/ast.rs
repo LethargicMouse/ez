@@ -43,14 +43,14 @@ pub struct Int {
 }
 
 pub enum Typ {
-    Name(Span),
+    Name(Span, Loc),
     I32,
 }
 impl Typ {
-    pub fn from_span(span: Span, code: &str) -> Typ {
+    pub fn from_span(span: Span, loc: Loc, code: &str) -> Typ {
         match &code[span] {
             "i32" => Self::I32,
-            _ => Self::Name(span),
+            _ => Self::Name(span, loc),
         }
     }
 }

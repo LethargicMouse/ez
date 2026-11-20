@@ -40,7 +40,7 @@ impl Typ {
     pub fn to_int(self) -> IntTyp {
         match self {
             Typ::Int(typ) => typ,
-            _ => unreachable!("{:?}.to_int()", self),
+            // _ => unreachable!("{:?}.to_int()", self),
         }
     }
 }
