@@ -13,7 +13,7 @@ pub struct Stream {
 
 impl Stream {
     pub fn new(source: Source) -> Self {
-        Self {
+        let mut res = Self {
             loc: Loc {
                 pos: Pos { line: 1, symbol: 1 },
                 line: (0..0).into(),
@@ -21,7 +21,9 @@ impl Stream {
             last: None,
             cursor: 0,
             source,
-        }
+        };
+        res.loc.line.end += res.count_while(|c| c != b'\n');
+        res
     }
 
     pub fn peek(&mut self) -> Token {
@@ -70,40 +72,32 @@ impl Stream {
     }
 
     fn give(&mut self, tok: Tok, len: usize) -> Token {
-        if false {
-            eprintln!("tok {}", tok.as_str());
-        }
-        Token {
+        let res = Token {
             span: (self.cursor..self.cursor + len).into(),
-            loc: self.give_loc(len),
+            loc: self.loc,
             tok,
+        };
+        if false {
+            eprintln!("give token {:?}", res);
         }
+        self.advance(len);
+        res
     }
 
     fn advance(&mut self, len: usize) {
         for c in &self.source.code.as_bytes()[self.cursor..][..len] {
+            self.cursor += 1;
             if *c == b'\n' {
                 self.loc.next_line();
+                self.loc.line.end += self.count_while(|c| c != b'\n');
             } else {
                 self.loc.next();
             }
         }
-        self.cursor += len;
-    }
-
-    pub fn consume(&mut self, tok: Tok) {
-        assert_eq!(tok, self.next().tok);
-    }
-
-    fn give_loc(&mut self, len: usize) -> Loc {
-        let pos = self.loc.pos;
-        self.advance(len);
-        let line = self.loc.line;
-        Loc { pos, line }
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Token {
     pub tok: Tok,
     pub span: Span,
@@ -148,7 +142,7 @@ impl From<&'_ [u8]> for Tok {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Pos {
     pub line: u32,
     pub symbol: u32,
@@ -160,7 +154,7 @@ impl Display for Pos {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Loc {
     pub pos: Pos,
     pub line: Span,
@@ -175,6 +169,5 @@ impl Loc {
 
     fn next(&mut self) {
         self.pos.symbol += 1;
-        self.line.end += 1;
     }
 }

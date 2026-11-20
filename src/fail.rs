@@ -22,6 +22,7 @@ macro_rules! error_loc {
     };
 }
 
+#[derive(Debug)]
 pub struct Fail;
 
 pub fn no_path(cmd: String) -> Fail {

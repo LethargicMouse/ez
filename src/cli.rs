@@ -37,7 +37,7 @@ pub fn run_file(path: PathBuf) -> Result<i32, Fail> {
         .unwrap_or(1))
 }
 
-fn compile(path: PathBuf) -> Result<(), Fail> {
+pub fn compile(path: PathBuf) -> Result<(), Fail> {
     let module = Module::read(path)?;
     let program = check::run(module)?;
     let program = mono::run(program);
