@@ -1,23 +1,52 @@
-use std::{
-    fs::read_to_string,
-    path::{Path, PathBuf},
-    range::Range,
-};
+use std::path::Path;
 
-use crate::{
-    fail::{self, Fail},
-    lex::Pos,
-    parse,
-};
+use crate::{fail::Fail, lex::Pos};
 
 pub struct Module<'a> {
     pub source: Source<'a>,
-    pub funs: Vec<Fun<'a>>,
+    pub items: Vec<Item<'a>>,
+}
+
+pub enum Item<'a> {
+    Fun(Fun<'a>),
+    ExtFun(Header<'a>),
+}
+
+impl<'a> From<Fun<'a>> for Item<'a> {
+    fn from(fun: Fun<'a>) -> Self {
+        Self::Fun(fun)
+    }
+}
+
+impl<'a> Item<'a> {
+    pub fn name(&self) -> &'a str {
+        match self {
+            Item::Fun(fun) => fun.header.name,
+            Item::ExtFun(header) => header.name,
+        }
+    }
+
+    pub fn kind(&self) -> ItemKind {
+        match self {
+            Item::Fun(_) => ItemKind::Fun,
+            Item::ExtFun(_) => ItemKind::ExtFun,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub enum ItemKind {
+    Fun,
+    ExtFun,
+}
+
+pub struct Header<'a> {
+    pub name: &'a str,
+    pub ret_typ: Typ<'a>,
 }
 
 pub struct Fun<'a> {
-    pub name: &'a str,
-    pub ret_typ: Typ<'a>,
+    pub header: Header<'a>,
     pub body: Block<'a>,
 }
 

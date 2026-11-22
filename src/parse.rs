@@ -9,44 +9,47 @@ pub fn run(source: Source) -> Result<Module, Fail> {
 }
 
 fn module(mut ctx: Context) -> Result<Module, Fail> {
-    let mut funs = Vec::new();
+    let mut items = Vec::new();
     loop {
         let next = ctx.stream.next();
-        match next.tok {
-            Tok::Eof => break,
-            Tok::Fun => match fun(&mut ctx) {
-                Ok(fun) => funs.push(fun),
-                Err(_) => break,
-            },
-            tok => {
-                report(Tok::Fun.as_str(), tok, next.pos, &mut ctx);
-                break;
-            }
+        if next.tok == Tok::Eof {
+            break;
         }
+        items.push(item_with(next, &mut ctx)?)
     }
     if ctx.errors.present() {
         Err(Fail)
     } else {
-        Ok(Module {
-            source: ctx.stream.source,
-            funs,
-        })
+        let source = ctx.stream.source;
+        Ok(Module { source, items })
     }
 }
 
-fn report(expected: &str, tok: Tok, pos: Pos, ctx: &mut Context) -> Fail {
-    ctx.errors.parse(&ctx.stream.source, pos, expected, tok)
+fn item_with<'a>(next: Token<'a>, ctx: &mut Context<'a>) -> Result<Item<'a>, Fail> {
+    match next.tok {
+        Tok::Fun => Ok(fun(ctx)?.into()),
+        _ => Err(report("item", next, ctx)),
+    }
+}
+
+fn report(expected: &str, found: Token, ctx: &mut Context) -> Fail {
+    ctx.errors
+        .parse(&ctx.stream.source, found.pos, expected, found.tok)
 }
 
 fn fun<'a>(ctx: &mut Context<'a>) -> Result<Fun<'a>, Fail> {
+    Ok(Fun {
+        header: header(ctx)?,
+        body: block(ctx)?,
+    })
+}
+
+fn header<'a>(ctx: &mut Context<'a>) -> Result<Header<'a>, Fail> {
     let name = expect(Tok::Name, ctx)?;
     expect(Tok::Parl, ctx)?;
     expect(Tok::Parr, ctx)?;
-    Ok(Fun {
-        name,
-        ret_typ: typ(ctx)?,
-        body: block(ctx)?,
-    })
+    let ret_typ = typ(ctx)?;
+    Ok(Header { name, ret_typ })
 }
 
 fn typ<'a>(ctx: &mut Context<'a>) -> Result<Typ<'a>, Fail> {
@@ -65,7 +68,7 @@ fn block<'a>(ctx: &mut Context<'a>) -> Result<Block<'a>, Fail> {
         match next.tok {
             Tok::Curr => break Ok(Block { exprs, out: expr }),
             Tok::Semi => exprs.push(expr),
-            _ => break Err(report(Tok::Semi.as_str(), next.tok, next.pos, ctx)),
+            _ => break Err(report(Tok::Semi.as_str(), next, ctx)),
         }
     }
 }
@@ -90,7 +93,7 @@ fn expr_named<'a>(next: Token<'a>, ctx: &mut Context<'a>) -> Result<Expr<'a>, Fa
         match next.tok {
             Tok::Comma => {}
             Tok::Parr => break,
-            _ => return Err(report(Tok::Comma.as_str(), next.tok, next.pos, ctx)),
+            _ => return Err(report(Tok::Comma.as_str(), next, ctx)),
         }
     }
     Ok(Call { name, args, pos }.into())
@@ -118,7 +121,7 @@ fn expr_atom_with<'a>(next: Token<'a>, ctx: &mut Context<'a>) -> Result<Expr<'a>
         }
         .into()),
         Tok::Name => expr_named(next, ctx),
-        _ => Err(report("<expr>", next.tok, next.pos, ctx)),
+        _ => Err(report("expr", next, ctx)),
     }
 }
 
@@ -131,7 +134,7 @@ fn expect_with<'a>(next: Token<'a>, expected: Tok, ctx: &mut Context<'a>) -> Res
     if next.tok == expected {
         Ok(next.body)
     } else {
-        Err(report(expected.as_str(), next.tok, next.pos, ctx))
+        Err(report(expected.as_str(), next, ctx))
     }
 }
 

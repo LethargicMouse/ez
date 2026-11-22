@@ -83,9 +83,14 @@ impl Errors {
         self.count != 0
     }
 
-    pub fn not_declared(&mut self, source: &Source, loc: Pos, name: &str) {
+    pub fn not_declared(&mut self, source: &Source, pos: Pos, name: &str) {
         self.count += 1;
-        error_loc!(source, loc, "item `{}` is not declared", name);
+        error_loc!(source, pos, "item `{}` is not declared", name);
+    }
+
+    pub fn main_not_fun(&mut self, source: &Source, pos: Pos) -> Fail {
+        self.count += 1;
+        error_loc!(source, pos, "`main` should be a defined function")
     }
 }
 

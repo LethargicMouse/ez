@@ -10,7 +10,7 @@ impl hir::Fun {
     fn mono(&self, funs: &mut Vec<lir::Fun>) {
         funs.push(lir::Fun {
             blocks: self.blocks.iter().map(|b| b.mono(&self.typ_vars)).collect(),
-            ret_typ: self.ret_typ.mono(&self.typ_vars),
+            ret_typ: self.header.ret_typ.mono(&self.typ_vars),
         });
     }
 }

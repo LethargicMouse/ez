@@ -1,18 +1,17 @@
 use std::collections::HashMap;
 
 use crate::{
-    ast::{self, Source},
+    ast::{self, ItemKind, Source},
     fail::{Errors, Fail},
     hir,
     lex::Pos,
-    util::Counter,
 };
 
 pub fn run(module: ast::Module) -> Result<hir::Program, Fail> {
     let mut info = ProgramInfo::new();
-    let module = module.check(&mut info);
-    info.modules.push(module);
-    let main_id = get_main_id(&mut info)?;
+    let module_info = module.check(&mut info);
+    let main_id = get_main_id(&mut info, &module_info)?;
+    info.modules.push(module_info.into());
     if info.errors.present() {
         Err(Fail)
     } else {
@@ -24,32 +23,32 @@ pub fn run(module: ast::Module) -> Result<hir::Program, Fail> {
 }
 
 impl<'a> ast::Module<'a> {
-    fn check(self, program: &mut ProgramInfo<'a>) -> hir::Module<'a> {
-        let mut info = ModuleInfo {
-            items: HashMap::new(),
-            source: self.source,
-        };
-        for (index, fun) in self.funs.iter().enumerate() {
-            info.items.insert(fun.name, index);
+    fn check(self, program: &mut ProgramInfo) -> ModuleInfo<'a> {
+        let mut info = ModuleInfo::new(self.source);
+        for (index, item) in self.items.iter().enumerate() {
+            info.item_ids.insert(item.name(), (item.kind(), index));
         }
-        let funs = self
-            .funs
-            .into_iter()
-            .map(|f| f.check(program, &info))
-            .collect();
-        hir::Module {
-            path: info.source.path,
-            items: info.items,
-            funs,
+        for item in self.items {
+            item.check(program, &mut info);
+        }
+        info
+    }
+}
+
+impl<'a> ast::Item<'a> {
+    fn check(self, program: &mut ProgramInfo, module: &mut ModuleInfo) {
+        match self {
+            ast::Item::Fun(fun) => module.funs.push(fun.check(program, module)),
+            ast::Item::ExtFun(header) => module.ext_funs.push(header.check(program, module)),
         }
     }
 }
 
 impl<'a> ast::Fun<'a> {
-    fn check(self, program: &mut ProgramInfo<'a>, module: &ModuleInfo) -> hir::Fun {
+    fn check(self, program: &mut ProgramInfo, module: &ModuleInfo) -> hir::Fun {
         let mut info = FunInfo::new();
-        let ret_typ = self.ret_typ.check(program, module);
-        let expr = self.body.check(&ret_typ, program, module, &mut info);
+        let header = self.header.check(program, module);
+        let expr = self.body.check(&header.ret_typ, program, module, &mut info);
         info.blocks.push(hir::Block {
             out: hir::Out::Ret(expr),
         });
@@ -57,7 +56,15 @@ impl<'a> ast::Fun<'a> {
         hir::Fun {
             typ_vars: info.typ_vars,
             blocks: info.blocks,
-            ret_typ,
+            header,
+        }
+    }
+}
+
+impl<'a> ast::Header<'a> {
+    fn check(self, program: &mut ProgramInfo, module: &ModuleInfo) -> hir::Header {
+        hir::Header {
+            ret_typ: self.ret_typ.check(program, module),
         }
     }
 }
@@ -80,7 +87,7 @@ impl<'a> ast::Block<'a> {
     fn check(
         self,
         hint: &hir::Typ,
-        program: &mut ProgramInfo<'a>,
+        program: &mut ProgramInfo,
         module: &ModuleInfo,
         fun: &mut FunInfo,
     ) -> hir::Expr {
@@ -95,7 +102,7 @@ impl<'a> ast::Expr<'a> {
     fn check(
         self,
         hint: &hir::Typ,
-        program: &mut ProgramInfo<'a>,
+        program: &mut ProgramInfo,
         module: &ModuleInfo,
         fun: &mut FunInfo,
     ) -> hir::Expr {
@@ -109,13 +116,8 @@ impl<'a> ast::Expr<'a> {
 }
 
 impl<'a> ast::Call<'a> {
-    fn check(
-        self,
-        program: &mut ProgramInfo<'a>,
-        module: &ModuleInfo,
-        fun: &mut FunInfo,
-    ) -> hir::Expr {
-        let Some(&index) = module.items.get(self.name) else {
+    fn check(self, program: &mut ProgramInfo, module: &ModuleInfo, fun: &mut FunInfo) -> hir::Expr {
+        let Some(&index) = module.item_ids.get(self.name) else {
             program
                 .errors
                 .not_declared(&module.source, self.pos, self.name);
@@ -145,17 +147,53 @@ impl ast::Int {
     }
 }
 
-fn get_main_id(ctx: &mut ProgramInfo) -> Result<hir::FunID, Fail> {
+fn get_main_id(program: &mut ProgramInfo, module: &ModuleInfo) -> Result<hir::FunID, Fail> {
     let mod_id = 0;
-    match ctx.modules[0].items.get("main") {
-        Some(&method_id) => Ok(hir::FunID { mod_id, method_id }),
-        None => Err(ctx.errors.no_main(&ctx.modules[0].path)),
+    match module.item_ids.get("main") {
+        Some(&(kind, method_id)) => match kind {
+            ItemKind::Fun => Ok(hir::FunID { mod_id, method_id }),
+            _ => Err(program
+                .errors
+                .main_not_fun(&module.source, item_pos(kind, method_id, module))),
+        },
+        None => Err(program.errors.no_main(&module.source.path)),
+    }
+}
+
+fn item_pos(kind: ItemKind, id: usize, module: &ModuleInfo) -> Pos {
+    match kind {
+        ItemKind::Fun => module.fun_poses[id],
+        ItemKind::ExtFun => todo!(),
     }
 }
 
 struct ModuleInfo<'a> {
-    items: HashMap<&'a str, usize>,
+    item_ids: HashMap<&'a str, (ItemKind, usize)>,
+    funs: Vec<hir::Fun>,
+    fun_poses: Vec<Pos>,
+    ext_funs: Vec<hir::Header>,
     source: Source<'a>,
+}
+
+impl<'a> ModuleInfo<'a> {
+    fn new(source: Source<'a>) -> Self {
+        ModuleInfo {
+            item_ids: HashMap::new(),
+            funs: Vec::new(),
+            ext_funs: Vec::new(),
+            fun_poses: Vec::new(),
+            source,
+        }
+    }
+}
+
+impl<'a> From<ModuleInfo<'a>> for hir::Module {
+    fn from(info: ModuleInfo<'a>) -> Self {
+        Self {
+            ext_funs: info.ext_funs,
+            funs: info.funs,
+        }
+    }
 }
 
 struct InferCheck {
@@ -187,12 +225,12 @@ fn check_infers(program: &mut ProgramInfo, module: &ModuleInfo, fun: &FunInfo) {
     }
 }
 
-struct ProgramInfo<'a> {
+struct ProgramInfo {
     errors: Errors,
-    modules: Vec<hir::Module<'a>>,
+    modules: Vec<hir::Module>,
 }
 
-impl<'a> ProgramInfo<'a> {
+impl ProgramInfo {
     fn new() -> Self {
         Self {
             errors: Errors::new(),
