@@ -1,26 +1,30 @@
-use std::{path::Path, process::Command};
+use std::{path::PathBuf, process::Command};
 
 use crate::{
-    cli::{compile, run_file},
+    cli::compile,
     fail::{self, Fail},
 };
 
-#[test]
-fn empty() -> Result<(), Fail> {
-    let code = run_file("tests/Empty.ez".into())?;
-    assert_eq!(123, code);
+fn test_file(name: &str, code: i32, stdout: &str, stderr: &str) -> Result<(), Fail> {
+    let path = PathBuf::from(format!("tests/{}.ez", name));
+    let out_ll_path = PathBuf::from(format!("build/{}.ll", name));
+    let out_path = PathBuf::from(format!("build/{}", name));
+    compile(path, &out_ll_path, &out_path)?;
+    let out = Command::new(&out_path)
+        .output()
+        .map_err(|err| fail::run_cmd(&out_path, err))?;
+    assert_eq!(Some(code), out.status.code());
+    assert_eq!(stdout.as_bytes(), out.stdout.as_slice());
+    assert_eq!(stderr.as_bytes(), out.stderr.as_slice());
     Ok(())
 }
 
 #[test]
+fn empty() -> Result<(), Fail> {
+    test_file("Empty", 123, "", "")
+}
+
+#[test]
 fn calc() -> Result<(), Fail> {
-    compile("tests/Call.ez".into())?;
-    let out = Path::new("build/out");
-    let out = Command::new(out)
-        .output()
-        .map_err(|err| fail::run_cmd(out, err))?;
-    assert_eq!(Some(0), out.status.code());
-    assert_eq!(b"123", out.stdout.as_slice());
-    assert_eq!(b"", out.stderr.as_slice());
-    Ok(())
+    test_file("Call", 0, "123", "")
 }

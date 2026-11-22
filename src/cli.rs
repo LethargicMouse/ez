@@ -28,8 +28,9 @@ fn show_help(exe_name: &str) {
 }
 
 pub fn run_file(path: PathBuf) -> Result<i32, Fail> {
+    let out_ll_path = Path::new("build/out.ll");
     let out_path = Path::new("build/out");
-    compile(path)?;
+    compile(path, out_ll_path, out_path)?;
     Ok(process::Command::new(out_path)
         .status()
         .map_err(|err| fail::run_cmd(out_path, err))?
@@ -37,18 +38,17 @@ pub fn run_file(path: PathBuf) -> Result<i32, Fail> {
         .unwrap_or(1))
 }
 
-pub fn compile(path: PathBuf) -> Result<(), Fail> {
+pub fn compile(path: PathBuf, out_ll_path: &Path, out_path: &Path) -> Result<(), Fail> {
     let module = Module::read(path)?;
     let program = check::run(module)?;
     let program = mono::run(program);
     let build_dir_path = Path::new("build");
     create_dir_all(build_dir_path).map_err(|err| fail::fs_create(build_dir_path, err))?;
-    let out_ll_path = Path::new("build/out.ll");
     codegen::run(program, out_ll_path)?;
     let clang = Path::new("clang");
     let clang_code = process::Command::new(clang)
         .arg("-o")
-        .arg("build/out")
+        .arg(out_path)
         .arg(out_ll_path)
         .status()
         .map_err(|err| fail::run_cmd(clang, err))?

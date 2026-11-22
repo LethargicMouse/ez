@@ -9,29 +9,34 @@ use crate::{
 };
 
 pub fn run(module: ast::Module) -> Result<hir::Program, Fail> {
-    let mut modules = Vec::new();
-    let mut id_map = IdMap::new();
-    let mut errors = Errors::new();
-    modules.push(module.check(&mut id_map, &mut errors));
-    let main_id = get_main_id(&modules, id_map, &mut errors)?;
-    if errors.present() {
+    let mut info = ProgramInfo::new();
+    let module = module.check(&mut info);
+    info.modules.push(module);
+    let main_id = get_main_id(&mut info)?;
+    if info.errors.present() {
         Err(Fail)
     } else {
-        Ok(hir::Program { main_id, modules })
+        Ok(hir::Program {
+            modules: info.modules,
+            main_id,
+        })
     }
 }
 
 impl ast::Module {
-    fn check(self, id_map: &mut IdMap, errors: &mut Errors) -> hir::Module {
+    fn check(self, program: &mut ProgramInfo) -> hir::Module {
         let mut info = ModuleInfo {
             items: HashMap::new(),
             source: self.source,
         };
+        for (index, fun) in self.funs.iter().enumerate() {
+            let id = program.id_map.get(info.source.code[fun.name].into());
+            info.items.insert(id, index);
+        }
         let funs = self
             .funs
             .into_iter()
-            .enumerate()
-            .map(|(i, f)| f.check(i, id_map, &mut info, errors))
+            .map(|f| f.check(program, &info))
             .collect();
         hir::Module {
             path: info.source.path,
@@ -42,37 +47,27 @@ impl ast::Module {
 }
 
 impl ast::Fun {
-    fn check(
-        self,
-        index: usize,
-        id_map: &mut IdMap,
-        module_info: &mut ModuleInfo,
-        errors: &mut Errors,
-    ) -> hir::Fun {
-        let id = id_map.get(module_info.source.code[self.name].into());
-        module_info.items.insert(id, index);
-        let mut blocks = Vec::new();
-        let mut typ_vars = Vec::new();
-        let mut infer_checker = InferChecker::new();
-        let ret_typ = self.ret_typ.check(&module_info.source, errors);
-        let expr = self.body.check(&ret_typ, &mut typ_vars, &mut infer_checker);
-        blocks.push(hir::Block {
+    fn check(self, program: &mut ProgramInfo, module: &ModuleInfo) -> hir::Fun {
+        let mut info = FunInfo::new();
+        let ret_typ = self.ret_typ.check(program, module);
+        let expr = self.body.check(&ret_typ, program, module, &mut info);
+        info.blocks.push(hir::Block {
             out: hir::Out::Ret(expr),
         });
-        infer_checker.run(&mut typ_vars, errors, &module_info.source);
+        check_infers(program, module, &info);
         hir::Fun {
-            typ_vars,
+            typ_vars: info.typ_vars,
+            blocks: info.blocks,
             ret_typ,
-            blocks,
         }
     }
 }
 
 impl ast::Typ {
-    fn check(self, source: &Source, errors: &mut Errors) -> hir::Typ {
+    fn check(self, program: &mut ProgramInfo, module: &ModuleInfo) -> hir::Typ {
         match self {
             ast::Typ::Name(name, loc) => {
-                errors.not_declared(source, loc, name);
+                program.errors.not_declared(&module.source, loc, name);
                 hir::Typ::Err
             }
             ast::Typ::I32 => hir::IntTyp::I32.into(),
@@ -84,10 +79,14 @@ impl ast::Block {
     fn check(
         self,
         hint: &hir::Typ,
-        typ_vars: &mut Vec<hir::Typ>,
-        infer_checker: &mut InferChecker,
+        program: &mut ProgramInfo,
+        module: &ModuleInfo,
+        fun: &mut FunInfo,
     ) -> hir::Expr {
-        self.out.check(&hint, typ_vars, infer_checker)
+        for expr in self.exprs {
+            let expr = expr.check(&hir::Typ::Any, program, module, fun);
+        }
+        self.out.check(&hint, program, module, fun)
     }
 }
 
@@ -95,12 +94,13 @@ impl ast::Expr {
     fn check(
         self,
         hint: &hir::Typ,
-        typ_vars: &mut Vec<hir::Typ>,
-        infer_checker: &mut InferChecker,
+        program: &mut ProgramInfo,
+        module: &ModuleInfo,
+        fun: &mut FunInfo,
     ) -> hir::Expr {
         match self {
-            ast::Expr::Int(int) => int.check(hint, typ_vars, infer_checker),
-            ast::Expr::Call(call) => call.check(),
+            ast::Expr::Int(int) => int.check(hint, fun),
+            ast::Expr::Call(call) => call.check(program, module, fun),
             ast::Expr::Str(span) => todo!(),
             ast::Expr::Field(field) => todo!(),
         }
@@ -108,42 +108,43 @@ impl ast::Expr {
 }
 
 impl ast::Call {
-    pub fn check(&self) -> hir::Expr {
+    fn check(self, program: &mut ProgramInfo, module: &ModuleInfo, fun: &mut FunInfo) -> hir::Expr {
+        let id = program.id_map.get(module.source.code[self.name].into());
+        let Some(&index) = module.items.get(&id) else {
+            program
+                .errors
+                .not_declared(&module.source, self.loc, self.name);
+            for arg in self.args {
+                arg.check(&hir::Typ::Err, program, module, fun);
+            }
+            return hir::Expr::Void;
+        };
         todo!()
     }
 }
 
 impl ast::Int {
-    fn check(
-        self,
-        hint: &hir::Typ,
-        typ_vars: &mut Vec<hir::Typ>,
-        infer_checker: &mut InferChecker,
-    ) -> hir::Expr {
+    fn check(self, hint: &hir::Typ, fun: &mut FunInfo) -> hir::Expr {
         let mut typ = if hint.is_int() {
             hint.copy()
         } else {
             hir::Typ::Any
         };
         if !typ.is_rigid() {
-            let id = typ_vars.len();
-            typ_vars.push(typ);
+            let id = fun.typ_vars.len();
+            fun.typ_vars.push(typ);
             typ = hir::Typ::Var(id);
-            infer_checker.checks.push(InferCheck { loc: self.loc, id });
+            fun.infer_checks.push(InferCheck { loc: self.loc, id });
         }
         hir::Expr::Int(typ, self.val)
     }
 }
 
-fn get_main_id(
-    modules: &[hir::Module],
-    mut id_map: IdMap,
-    errors: &mut Errors,
-) -> Result<hir::FunID, Fail> {
+fn get_main_id(ctx: &mut ProgramInfo) -> Result<hir::FunID, Fail> {
     let mod_id = 0;
-    match modules[0].items.get(&id_map.get("main".into())) {
+    match ctx.modules[0].items.get(&ctx.id_map.get("main".into())) {
         Some(&method_id) => Ok(hir::FunID { mod_id, method_id }),
-        None => Err(errors.no_main(&modules[0].path)),
+        None => Err(ctx.errors.no_main(&ctx.modules[0].path)),
     }
 }
 
@@ -170,25 +171,47 @@ struct ModuleInfo {
     source: Source,
 }
 
-struct InferChecker {
-    checks: Vec<InferCheck>,
+struct InferCheck {
+    id: usize,
+    loc: Loc,
 }
 
-impl InferChecker {
-    fn new() -> Self {
-        Self { checks: Vec::new() }
-    }
+struct FunInfo {
+    blocks: Vec<hir::Block>,
+    typ_vars: Vec<hir::Typ>,
+    infer_checks: Vec<InferCheck>,
+}
 
-    fn run(self, typ_vars: &mut Vec<hir::Typ>, errors: &mut Errors, source: &Source) {
-        for check in self.checks {
-            if !typ_vars[check.id].is_rigid() {
-                errors.cannot_infer(&source, check.loc);
-            }
+impl FunInfo {
+    fn new() -> Self {
+        Self {
+            blocks: Vec::new(),
+            typ_vars: Vec::new(),
+            infer_checks: Vec::new(),
         }
     }
 }
 
-struct InferCheck {
-    id: usize,
-    loc: Loc,
+fn check_infers(program: &mut ProgramInfo, module: &ModuleInfo, fun: &FunInfo) {
+    for check in &fun.infer_checks {
+        if !fun.typ_vars[check.id].is_rigid() {
+            program.errors.cannot_infer(&module.source, check.loc);
+        }
+    }
+}
+
+struct ProgramInfo {
+    id_map: IdMap,
+    errors: Errors,
+    modules: Vec<hir::Module>,
+}
+
+impl ProgramInfo {
+    fn new() -> Self {
+        Self {
+            id_map: IdMap::new(),
+            errors: Errors::new(),
+            modules: Vec::new(),
+        }
+    }
 }

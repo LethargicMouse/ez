@@ -26,12 +26,14 @@ pub struct Call {
 
 pub enum Expr {
     Int(IntTyp, u64),
+    Void,
 }
 
 impl Display for Expr {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Expr::Int(typ, int) => write!(f, "{} {}", typ, int),
+            Expr::Void => unreachable!("void expr used"),
         }
     }
 }

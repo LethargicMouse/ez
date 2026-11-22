@@ -37,7 +37,7 @@ pub struct Call {
 
 pub enum Expr {
     Int(Typ, u64),
-    Call(Call),
+    Void,
 }
 
 #[derive(Debug)]

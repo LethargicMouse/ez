@@ -30,6 +30,7 @@ pub struct Block {
 
 pub struct Call {
     pub name: Span,
+    pub loc: Loc,
     pub args: Vec<Expr>,
 }
 

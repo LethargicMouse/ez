@@ -123,6 +123,7 @@ pub enum Tok {
     Comma,
     Dot,
     Semi,
+    Extern,
 }
 
 impl Tok {
@@ -142,6 +143,7 @@ impl Tok {
             Tok::Comma => "`,`",
             Tok::Dot => "`.`",
             Tok::Semi => "`;`",
+            Tok::Extern => "`extern`",
         }
     }
 }
@@ -150,6 +152,7 @@ impl From<&'_ [u8]> for Tok {
     fn from(s: &'_ [u8]) -> Self {
         match s {
             b"fn" => Tok::Fun,
+            b"extern" => Tok::Extern,
             _ => Tok::Name,
         }
     }

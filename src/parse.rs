@@ -77,6 +77,7 @@ fn expr(ctx: &mut Context) -> Result<(Expr, Token), Fail> {
 
 fn expr_named(next: Token, ctx: &mut Context) -> Result<Expr, Fail> {
     let name = next.span;
+    let loc = next.loc;
     expect(Tok::Parl, ctx)?;
     let mut args = Vec::new();
     loop {
@@ -92,7 +93,7 @@ fn expr_named(next: Token, ctx: &mut Context) -> Result<Expr, Fail> {
             _ => return Err(report(Tok::Comma.as_str(), next.tok, next.loc, ctx)),
         }
     }
-    Ok(Call { name, args }.into())
+    Ok(Call { name, args, loc }.into())
 }
 
 fn expr_with(next: Token, ctx: &mut Context) -> Result<(Expr, Token), Fail> {

@@ -35,7 +35,7 @@ impl hir::Expr {
     fn mono(&self, typ_vars: &[hir::Typ]) -> lir::Expr {
         match self {
             hir::Expr::Int(typ, int) => lir::Expr::Int(typ.mono(typ_vars).to_int(), *int),
-            hir::Expr::Call(call) => todo!(),
+            hir::Expr::Void => lir::Expr::Void,
         }
     }
 }
