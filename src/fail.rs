@@ -6,7 +6,7 @@ use std::{
 
 use crate::{
     ast::Source,
-    lex::{Loc, Span, Tok},
+    lex::{Pos, Tok},
 };
 
 macro_rules! error {
@@ -17,8 +17,8 @@ macro_rules! error {
 }
 
 macro_rules! error_loc {
-    ($source:expr, $loc:expr, $fmt:expr $(, $($arg:expr),+)? $(,)?) => {
-        error!(concat!("{}:{}: ", $fmt, "\n    {}\n    {}\n"), $source.path.display(), $loc.pos $(, $($arg),+)?, &$source.code[$loc.line], SymbolMark($loc.pos.symbol))
+    ($source:expr, $pos:expr, $fmt:expr $(, $($arg:expr),+)? $(,)?) => {
+        error!(concat!("{}:{}: ", $fmt, "\n    {}\n    {}\n"), $source.path.display(), $pos $(, $($arg),+)?, $source.lines[$pos.line as usize - 1], SymbolMark($pos.symbol))
     };
 }
 
@@ -37,7 +37,7 @@ pub fn run_cmd(program: &Path, err: io::Error) -> Fail {
     error!("failed to run `{}`: {}", program.display(), err)
 }
 
-pub fn file_read(path: &PathBuf, err: io::Error) -> Fail {
+pub fn file_read(path: &Path, err: io::Error) -> Fail {
     error!("failed to read `{}`: {}", path.display(), err)
 }
 
@@ -63,29 +63,29 @@ impl Errors {
         error!("{}: `main` function not declared\n", path.display())
     }
 
-    pub fn parse(&mut self, source: &Source, loc: Loc, expected: &str, found: Tok) -> Fail {
+    pub fn parse(&mut self, source: &Source, pos: Pos, expected: &str, found: Tok) -> Fail {
         self.count += 1;
         error_loc!(
             source,
-            loc,
+            pos,
             "expected {}, found {}",
             expected,
             found.as_str(),
         )
     }
 
-    pub fn cannot_infer(&mut self, source: &Source, loc: Loc) {
+    pub fn cannot_infer(&mut self, source: &Source, pos: Pos) {
         self.count += 1;
-        error_loc!(source, loc, "cannot infer type");
+        error_loc!(source, pos, "cannot infer type");
     }
 
     pub fn present(&self) -> bool {
         self.count != 0
     }
 
-    pub fn not_declared(&mut self, source: &Source, loc: Loc, name: Span) {
+    pub fn not_declared(&mut self, source: &Source, loc: Pos, name: &str) {
         self.count += 1;
-        error_loc!(source, loc, "item `{}` is not declared", &source.code[name]);
+        error_loc!(source, loc, "item `{}` is not declared", name);
     }
 }
 

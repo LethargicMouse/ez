@@ -1,14 +1,14 @@
 use std::{
-    fs::create_dir_all,
+    fs::{create_dir_all, read_to_string},
     path::{Path, PathBuf},
     process::{self, exit},
 };
 
 use crate::{
-    ast::Module,
+    ast::{Module, Source},
     check, codegen,
     fail::{self, Fail},
-    mono,
+    mono, parse,
 };
 
 pub fn run(args: impl Iterator<Item = String>) -> Result<(), Fail> {
@@ -30,7 +30,7 @@ fn show_help(exe_name: &str) {
 pub fn run_file(path: PathBuf) -> Result<i32, Fail> {
     let out_ll_path = Path::new("build/out.ll");
     let out_path = Path::new("build/out");
-    compile(path, out_ll_path, out_path)?;
+    compile(&path, out_ll_path, out_path)?;
     Ok(process::Command::new(out_path)
         .status()
         .map_err(|err| fail::run_cmd(out_path, err))?
@@ -38,8 +38,9 @@ pub fn run_file(path: PathBuf) -> Result<i32, Fail> {
         .unwrap_or(1))
 }
 
-pub fn compile(path: PathBuf, out_ll_path: &Path, out_path: &Path) -> Result<(), Fail> {
-    let module = Module::read(path)?;
+pub fn compile(path: &Path, out_ll_path: &Path, out_path: &Path) -> Result<(), Fail> {
+    let code = read_to_string(&path).map_err(|err| fail::file_read(path, err))?;
+    let module = parse::run(Source::new(path, &code)?)?;
     let program = check::run(module)?;
     let program = mono::run(program);
     let build_dir_path = Path::new("build");

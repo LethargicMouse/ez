@@ -1,7 +1,10 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
-pub struct Program {
-    pub modules: Vec<Module>,
+pub struct Program<'a> {
+    pub modules: Vec<Module<'a>>,
     pub main_id: FunID,
 }
 
@@ -10,10 +13,10 @@ pub struct FunID {
     pub method_id: usize,
 }
 
-pub struct Module {
-    pub path: PathBuf,
+pub struct Module<'a> {
+    pub path: &'a Path,
     pub funs: Vec<Fun>,
-    pub items: HashMap<u32, usize>,
+    pub items: HashMap<&'a str, usize>,
 }
 
 pub struct Fun {

@@ -1,30 +1,23 @@
-use std::{fmt::Display, range::Range};
+use std::fmt::Display;
 
 use crate::ast::Source;
 
-pub type Span = Range<usize>;
-
-pub struct Stream {
-    pub source: Source,
-    loc: Loc,
+pub struct Stream<'a> {
+    pub source: Source<'a>,
+    pos: Pos,
     cursor: usize,
 }
 
-impl Stream {
-    pub fn new(source: Source) -> Self {
-        let mut res = Self {
-            loc: Loc {
-                pos: Pos { line: 1, symbol: 1 },
-                line: (0..0).into(),
-            },
+impl<'a> Stream<'a> {
+    pub fn new(source: Source<'a>) -> Self {
+        Self {
+            pos: Pos { line: 1, symbol: 1 },
             cursor: 0,
             source,
-        };
-        res.loc.line.end += res.count_while(|c| c != b'\n');
-        res
+        }
     }
 
-    pub fn next(&mut self) -> Token {
+    pub fn next(&mut self) -> Token<'a> {
         self.advance_while(|c| c.is_ascii_whitespace());
         let mut chars = self.rest().iter();
         match chars.next() {
@@ -74,10 +67,10 @@ impl Stream {
         &self.source.code.as_bytes()[self.cursor..]
     }
 
-    fn give(&mut self, tok: Tok, len: usize) -> Token {
+    fn give(&mut self, tok: Tok, len: usize) -> Token<'a> {
         let res = Token {
-            span: (self.cursor..self.cursor + len).into(),
-            loc: self.loc,
+            body: &self.source.code[self.cursor..self.cursor + len],
+            pos: self.pos,
             tok,
         };
         if false {
@@ -91,20 +84,20 @@ impl Stream {
         for c in &self.source.code.as_bytes()[self.cursor..][..len] {
             self.cursor += 1;
             if *c == b'\n' {
-                self.loc.next_line();
-                self.loc.line.end += self.count_while(|c| c != b'\n');
+                self.pos.line += 1;
+                self.pos.symbol = 1;
             } else {
-                self.loc.next();
+                self.pos.symbol += 1;
             }
         }
     }
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct Token {
+pub struct Token<'a> {
     pub tok: Tok,
-    pub span: Span,
-    pub loc: Loc,
+    pub body: &'a str,
+    pub pos: Pos,
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -167,23 +160,5 @@ pub struct Pos {
 impl Display for Pos {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}:{}", self.line, self.symbol)
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct Loc {
-    pub pos: Pos,
-    pub line: Span,
-}
-impl Loc {
-    fn next_line(&mut self) {
-        self.pos.line += 1;
-        self.pos.symbol = 1;
-        self.line.start = self.line.end + 1;
-        self.line.end = self.line.start;
-    }
-
-    fn next(&mut self) {
-        self.pos.symbol += 1;
     }
 }

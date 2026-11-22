@@ -9,7 +9,7 @@ fn test_file(name: &str, code: i32, stdout: &str, stderr: &str) -> Result<(), Fa
     let path = PathBuf::from(format!("tests/{}.ez", name));
     let out_ll_path = PathBuf::from(format!("build/{}.ll", name));
     let out_path = PathBuf::from(format!("build/{}", name));
-    compile(path, &out_ll_path, &out_path)?;
+    compile(&path, &out_ll_path, &out_path)?;
     let out = Command::new(&out_path)
         .output()
         .map_err(|err| fail::run_cmd(&out_path, err))?;

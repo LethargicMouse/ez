@@ -1,7 +1,7 @@
 use crate::{
     ast::*,
     fail::{Errors, Fail},
-    lex::{self, Loc, Span, Tok, Token},
+    lex::{self, Pos, Tok, Token},
 };
 
 pub fn run(source: Source) -> Result<Module, Fail> {
@@ -19,7 +19,7 @@ fn module(mut ctx: Context) -> Result<Module, Fail> {
                 Err(_) => break,
             },
             tok => {
-                report(Tok::Fun.as_str(), tok, next.loc, &mut ctx);
+                report(Tok::Fun.as_str(), tok, next.pos, &mut ctx);
                 break;
             }
         }
@@ -34,11 +34,11 @@ fn module(mut ctx: Context) -> Result<Module, Fail> {
     }
 }
 
-fn report(expected: &str, tok: Tok, loc: Loc, ctx: &mut Context) -> Fail {
-    ctx.errors.parse(&ctx.stream.source, loc, expected, tok)
+fn report(expected: &str, tok: Tok, pos: Pos, ctx: &mut Context) -> Fail {
+    ctx.errors.parse(&ctx.stream.source, pos, expected, tok)
 }
 
-fn fun(ctx: &mut Context) -> Result<Fun, Fail> {
+fn fun<'a>(ctx: &mut Context<'a>) -> Result<Fun<'a>, Fail> {
     let name = expect(Tok::Name, ctx)?;
     expect(Tok::Parl, ctx)?;
     expect(Tok::Parr, ctx)?;
@@ -49,15 +49,15 @@ fn fun(ctx: &mut Context) -> Result<Fun, Fail> {
     })
 }
 
-fn typ(ctx: &mut Context) -> Result<Typ, Fail> {
+fn typ<'a>(ctx: &mut Context<'a>) -> Result<Typ<'a>, Fail> {
     let next = ctx.stream.next();
     match next.tok {
-        Tok::Name => Ok(Typ::from_span(next.span, next.loc, &ctx.stream.source.code)),
+        Tok::Name => Ok(Typ::from_name(next.body, next.pos)),
         _ => unreachable!("parse typ with first tok {}", next.tok.as_str()),
     }
 }
 
-fn block(ctx: &mut Context) -> Result<Block, Fail> {
+fn block<'a>(ctx: &mut Context<'a>) -> Result<Block<'a>, Fail> {
     expect(Tok::Curl, ctx)?;
     let mut exprs = Vec::new();
     loop {
@@ -65,19 +65,19 @@ fn block(ctx: &mut Context) -> Result<Block, Fail> {
         match next.tok {
             Tok::Curr => break Ok(Block { exprs, out: expr }),
             Tok::Semi => exprs.push(expr),
-            _ => break Err(report(Tok::Semi.as_str(), next.tok, next.loc, ctx)),
+            _ => break Err(report(Tok::Semi.as_str(), next.tok, next.pos, ctx)),
         }
     }
 }
 
-fn expr(ctx: &mut Context) -> Result<(Expr, Token), Fail> {
+fn expr<'a>(ctx: &mut Context<'a>) -> Result<(Expr<'a>, Token<'a>), Fail> {
     let next = ctx.stream.next();
     expr_with(next, ctx)
 }
 
-fn expr_named(next: Token, ctx: &mut Context) -> Result<Expr, Fail> {
-    let name = next.span;
-    let loc = next.loc;
+fn expr_named<'a>(next: Token<'a>, ctx: &mut Context<'a>) -> Result<Expr<'a>, Fail> {
+    let name = next.body;
+    let pos = next.pos;
     expect(Tok::Parl, ctx)?;
     let mut args = Vec::new();
     loop {
@@ -90,13 +90,13 @@ fn expr_named(next: Token, ctx: &mut Context) -> Result<Expr, Fail> {
         match next.tok {
             Tok::Comma => {}
             Tok::Parr => break,
-            _ => return Err(report(Tok::Comma.as_str(), next.tok, next.loc, ctx)),
+            _ => return Err(report(Tok::Comma.as_str(), next.tok, next.pos, ctx)),
         }
     }
-    Ok(Call { name, args, loc }.into())
+    Ok(Call { name, args, pos }.into())
 }
 
-fn expr_with(next: Token, ctx: &mut Context) -> Result<(Expr, Token), Fail> {
+fn expr_with<'a>(next: Token<'a>, ctx: &mut Context<'a>) -> Result<(Expr<'a>, Token<'a>), Fail> {
     let expr = expr_atom_with(next, ctx)?;
     loop {
         let next = ctx.stream.next();
@@ -109,43 +109,39 @@ fn expr_with(next: Token, ctx: &mut Context) -> Result<(Expr, Token), Fail> {
     }
 }
 
-fn expr_atom_with(next: Token, ctx: &mut Context) -> Result<Expr, Fail> {
+fn expr_atom_with<'a>(next: Token<'a>, ctx: &mut Context<'a>) -> Result<Expr<'a>, Fail> {
     match next.tok {
-        Tok::Str => Ok(Expr::Str(next.span)),
+        Tok::Str => Ok(Expr::Str(next.body)),
         Tok::Int => Ok(Int {
-            val: ctx.stream.source.code[next.span].parse().unwrap(),
-            loc: next.loc,
+            val: next.body.parse().unwrap(),
+            pos: next.pos,
         }
         .into()),
         Tok::Name => expr_named(next, ctx),
-        _ => Err(report("<expr>", next.tok, next.loc, ctx)),
+        _ => Err(report("<expr>", next.tok, next.pos, ctx)),
     }
 }
 
-fn expect(expected: Tok, ctx: &mut Context) -> Result<Span, Fail> {
+fn expect<'a>(expected: Tok, ctx: &mut Context<'a>) -> Result<&'a str, Fail> {
     let next = ctx.stream.next();
     expect_with(next, expected, ctx)
 }
 
-fn expect_with(
-    next: Token,
-    expected: Tok,
-    ctx: &mut Context,
-) -> Result<std::range::Range<usize>, Fail> {
+fn expect_with<'a>(next: Token<'a>, expected: Tok, ctx: &mut Context<'a>) -> Result<&'a str, Fail> {
     if next.tok == expected {
-        Ok(next.span)
+        Ok(next.body)
     } else {
-        Err(report(expected.as_str(), next.tok, next.loc, ctx))
+        Err(report(expected.as_str(), next.tok, next.pos, ctx))
     }
 }
 
-struct Context {
-    stream: lex::Stream,
+struct Context<'a> {
+    stream: lex::Stream<'a>,
     errors: Errors,
 }
 
-impl Context {
-    fn new(source: Source) -> Self {
+impl<'a> Context<'a> {
+    fn new(source: Source<'a>) -> Self {
         Self {
             errors: Errors::new(),
             stream: lex::Stream::new(source),
